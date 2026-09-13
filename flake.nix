@@ -9,57 +9,51 @@
   };
 
   inputs = {
-    nixpkgs.url = "github:usrbinkat/nixpkgs/gssproxy-package-and-module";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
 
   outputs =
-    {
-      self,
-      nixpkgs,
-      flake-utils,
-    }:
+    { self, nixpkgs }:
     let
-      # Bun release version — single source of truth
-      bunVersion = "1.4.2";
+      lib = nixpkgs.lib;
 
-      # Per-platform binary release URLs and SRI hashes
+      version = "1.4.2";
+
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
+
+      forAllSystems = lib.genAttrs supportedSystems;
+
       sources = {
         "aarch64-darwin" = {
-          url = "https://github.com/oven-sh/bun/releases/download/bun-v${bunVersion}/bun-darwin-aarch64.zip";
+          url = "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-darwin-aarch64.zip";
           hash = "sha256-kJh6OhbX21VtiGrD1VHnttPt8KHPQ6yu1iLoZ2vh0S8=";
           sourceRoot = "bun-darwin-aarch64";
         };
-        "x86_64-darwin" = {
-          url = "https://github.com/oven-sh/bun/releases/download/bun-v${bunVersion}/bun-darwin-x64-baseline.zip";
-          hash = "sha256-utW71s8U0JgNEV9ZVMn/kE32GdXplNLaH/zNPzFjALA=";
-          sourceRoot = "bun-darwin-x64-baseline";
-        };
         "aarch64-linux" = {
-          url = "https://github.com/oven-sh/bun/releases/download/bun-v${bunVersion}/bun-linux-aarch64.zip";
+          url = "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-aarch64.zip";
           hash = "sha256-VDKLvC2cjgyfiSxUTWbFeoO4QTnjSQnl7oF1jxrI/ac=";
           sourceRoot = null;
         };
         "x86_64-linux" = {
-          url = "https://github.com/oven-sh/bun/releases/download/bun-v${bunVersion}/bun-linux-x64.zip";
+          url = "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-x64.zip";
           hash = "sha256-NjaPrvdSeHXV/6UuU81IAhdB8qg+tiCKjdZAaNQiqRM=";
           sourceRoot = null;
         };
       };
 
-      supportedSystems = builtins.attrNames sources;
-
-      # Build the prebuilt bun binary package for a given pkgs
-      mkBunPackage =
-        pkgs:
+      mkBun =
+        system:
         let
-          inherit (pkgs) lib stdenvNoCC;
-          platform = stdenvNoCC.hostPlatform.system;
-          src = sources.${platform} or (throw "Unsupported system: ${platform}");
+          pkgs = import nixpkgs { inherit system; };
+          src = sources.${system};
         in
-        stdenvNoCC.mkDerivation {
+        pkgs.stdenvNoCC.mkDerivation {
           pname = "bun";
-          version = bunVersion;
+          inherit version;
 
           src = pkgs.fetchurl {
             inherit (src) url hash;
@@ -68,13 +62,12 @@
           sourceRoot = src.sourceRoot;
 
           strictDeps = true;
-
           nativeBuildInputs = [
             pkgs.unzip
             pkgs.installShellFiles
             pkgs.makeWrapper
           ]
-          ++ lib.optionals stdenvNoCC.hostPlatform.isLinux [ pkgs.autoPatchelfHook ];
+          ++ lib.optionals pkgs.stdenvNoCC.hostPlatform.isLinux [ pkgs.autoPatchelfHook ];
 
           buildInputs = [ pkgs.openssl ];
 
@@ -90,53 +83,42 @@
 
           postPhases = [ "postPatchelf" ];
           postPatchelf =
-            lib.optionalString stdenvNoCC.hostPlatform.isDarwin ''
+            lib.optionalString pkgs.stdenvNoCC.hostPlatform.isDarwin ''
               '${lib.getExe' pkgs.cctools "${pkgs.cctools.targetPrefix}install_name_tool"}' $out/bin/bun \
                 -change /usr/lib/libicucore.A.dylib '${lib.getLib pkgs.darwin.ICU}/lib/libicucore.A.dylib'
               '${lib.getExe pkgs.rcodesign}' sign --code-signature-flags linker-signed $out/bin/bun
             ''
-            +
-              lib.optionalString
-                (
-                  stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform
-                  && !(stdenvNoCC.hostPlatform.isDarwin && stdenvNoCC.hostPlatform.isx86_64)
-                )
-                ''
-                  installShellCompletion --cmd bun \
-                    --bash <(SHELL="bash" $out/bin/bun completions) \
-                    --zsh <(SHELL="zsh" $out/bin/bun completions) \
-                    --fish <(SHELL="fish" $out/bin/bun completions)
-                '';
+            + lib.optionalString (pkgs.stdenvNoCC.buildPlatform.canExecute pkgs.stdenvNoCC.hostPlatform) ''
+              installShellCompletion --cmd bun \
+                --bash <(SHELL="bash" $out/bin/bun completions) \
+                --zsh <(SHELL="zsh" $out/bin/bun completions) \
+                --fish <(SHELL="fish" $out/bin/bun completions)
+            '';
 
           meta = {
             homepage = "https://bun.sh";
-            changelog = "https://bun.sh/blog/bun-v${bunVersion}";
+            changelog = "https://bun.sh/blog/bun-v${version}";
             description = "Incredibly fast JavaScript runtime, bundler, transpiler and package manager – all in one";
             sourceProvenance = with lib.sourceTypes; [ binaryNativeCode ];
-            longDescription = ''
-              All in one fast & easy-to-use tool. Instead of 1,000 node_modules for development, you only need bun.
-            '';
             license = with lib.licenses; [
               mit
               lgpl21Only
             ];
             mainProgram = "bun";
-            platforms = supportedSystems;
-            broken = stdenvNoCC.hostPlatform.isMusl;
+            platforms = builtins.attrNames sources;
+            broken = pkgs.stdenvNoCC.hostPlatform.isMusl;
           };
         };
 
-      # LLVM/Clang toolchain for building bun from source
       mkDevShell =
-        pkgs:
+        system:
         let
-          inherit (pkgs) lib;
+          pkgs = import nixpkgs { inherit system; };
           llvm = pkgs.llvm_21;
           clang = pkgs.clang_21;
           lld = pkgs.lld_21;
           nodejs = pkgs.nodejs_26;
-
-          devPackages = [
+          devPkgs = [
             pkgs.cmake
             pkgs.ninja
             pkgs.pkg-config
@@ -148,7 +130,7 @@
             pkgs.rustc
             pkgs.cargo
             pkgs.go
-            pkgs.bun
+            (mkBun system)
             nodejs
             pkgs.python3
             pkgs.libtool
@@ -164,20 +146,20 @@
             pkgs.unzip
             pkgs.xz
           ]
-          ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+          ++ lib.optionals pkgs.stdenv.isLinux [
             pkgs.gdb
-            pkgs.libx11
-            pkgs.libxcb
-            pkgs.libxcomposite
-            pkgs.libxcursor
-            pkgs.libxdamage
-            pkgs.libxext
-            pkgs.libxfixes
-            pkgs.libxi
-            pkgs.libxrandr
-            pkgs.libxrender
-            pkgs.libxscrnsaver
-            pkgs.libxtst
+            pkgs.xorg.libX11
+            pkgs.xorg.libxcb
+            pkgs.xorg.libXcomposite
+            pkgs.xorg.libXcursor
+            pkgs.xorg.libXdamage
+            pkgs.xorg.libXext
+            pkgs.xorg.libXfixes
+            pkgs.xorg.libXi
+            pkgs.xorg.libXrandr
+            pkgs.xorg.libXrender
+            pkgs.xorg.libXScrnSaver
+            pkgs.xorg.libXtst
             pkgs.libxkbcommon
             pkgs.mesa
             pkgs.nspr
@@ -198,15 +180,17 @@
             pkgs.liberation_ttf
             pkgs.atk
             pkgs.libdrm
-            pkgs.libxshmfence
+            pkgs.xorg.libxshmfence
             pkgs.gdk-pixbuf
           ]
-          ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
-            (pkgs.darwinMinVersionHook "11.0")
+          ++ lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.darwin.apple_sdk.frameworks.CoreFoundation
+            pkgs.darwin.apple_sdk.frameworks.CoreServices
+            pkgs.darwin.apple_sdk.frameworks.Security
           ];
         in
         (pkgs.mkShell.override { stdenv = pkgs.clangStdenv; }) {
-          packages = devPackages;
+          packages = devPkgs;
           hardeningDisable = [ "fortify" ];
 
           shellHook = ''
@@ -221,20 +205,21 @@
             export CMAKE_SYSTEM_PROCESSOR="$(uname -m)"
             export TMPDIR="''${TMPDIR:-/tmp}"
           ''
-          + lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+          + lib.optionalString pkgs.stdenv.isLinux ''
             export LD="${lib.getExe' lld "ld.lld"}"
             export NIX_CFLAGS_LINK="''${NIX_CFLAGS_LINK:+$NIX_CFLAGS_LINK }-fuse-ld=lld"
-            export LD_LIBRARY_PATH="${lib.makeLibraryPath devPackages}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            export LD_LIBRARY_PATH="${lib.makeLibraryPath devPkgs}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           ''
           + ''
+
             echo "====================================="
             echo "Bun Development Environment"
             echo "====================================="
-            echo "Bun:   $(bun --version 2>/dev/null || echo 'not found')"
-            echo "Node:  $(node --version 2>/dev/null || echo 'not found')"
-            echo "Clang: $(clang --version 2>/dev/null | head -n1 || echo 'not found')"
-            echo "CMake: $(cmake --version 2>/dev/null | head -n1 || echo 'not found')"
-            echo "LLVM:  ${llvm.version}"
+            echo "Bun:    $(bun --version 2>/dev/null || echo 'not found')"
+            echo "Node:   $(node --version 2>/dev/null || echo 'not found')"
+            echo "Clang:  $(clang --version 2>/dev/null | head -n1 || echo 'not found')"
+            echo "CMake:  $(cmake --version 2>/dev/null | head -n1 || echo 'not found')"
+            echo "LLVM:   ${llvm.version}"
             echo ""
             echo "Quick start:"
             echo "  bun bd                    # Build debug binary"
@@ -246,64 +231,152 @@
           ENABLE_CCACHE = "1";
         };
     in
+    {
+      # nix build, nix run, nix shell, nix profile install
+      packages = forAllSystems (system: {
+        bun = mkBun system;
+        default = mkBun system;
+      });
 
-    # Per-system outputs
-    flake-utils.lib.eachSystem supportedSystems (
-      system:
-      let
-        pkgs = import nixpkgs {
-          inherit system;
-          config.allowUnfree = true;
+      # nix develop — source build environment
+      # nix develop .#minimal — prebuilt binary only
+      devShells = forAllSystems (system: {
+        default = mkDevShell system;
+        minimal = (import nixpkgs { inherit system; }).mkShell {
+          packages = [ (mkBun system) ];
         };
-        bunPkg = mkBunPackage pkgs;
-      in
-      {
-        # nix build github:usrbinkat/bun
-        packages = {
-          default = bunPkg;
-          bun = bunPkg;
-        };
+      });
 
-        # nix develop github:usrbinkat/bun
-        devShells.default = mkDevShell pkgs;
-
-        # nix flake check
-        checks.bun-version =
-          pkgs.runCommand "bun-version-check"
-            {
-              nativeBuildInputs = [ bunPkg ];
-              meta.timeout = 30;
-            }
-            ''
-              out_version="$(bun --version)"
-              expected="${bunVersion}"
-              if [ "$out_version" != "$expected" ]; then
-                echo "Version mismatch: got $out_version, expected $expected" >&2
-                exit 1
-              fi
-              touch $out
-            '';
-      }
-    )
-
-    # Cross-system outputs
-    // {
-      # nix flake init -t github:usrbinkat/bun
-      templates = {
-        default = {
-          path = ./templates/default;
-          description = "Bun project with nix flake";
-          welcomeText = ''
-            # Bun Project
-            Run `nix develop` or `direnv allow` to enter the development shell.
-          '';
-        };
-      };
-
-      # Composable overlay: pkgs.bun = prebuilt binary
-      # Usage: overlays = [ bun.overlays.default ];
+      # Composable overlay for downstream flakes
       overlays.default = final: _prev: {
-        bun = mkBunPackage final;
+        bun = mkBun final.stdenv.hostPlatform.system;
       };
+
+      # NixOS module: programs.bun.enable
+      nixosModules.default =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.programs.bun;
+        in
+        {
+          options.programs.bun = {
+            enable = lib.mkEnableOption "Bun JavaScript runtime";
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.bun;
+              defaultText = lib.literalExpression "bun.packages.\${system}.bun";
+              description = "The bun package to use.";
+            };
+          };
+          config = lib.mkIf cfg.enable {
+            environment.systemPackages = [ cfg.package ];
+          };
+        };
+
+      # Home Manager module: programs.bun.enable, programs.bun.settings
+      homeManagerModules.default =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.programs.bun;
+          tomlFormat = pkgs.formats.toml { };
+        in
+        {
+          options.programs.bun = {
+            enable = lib.mkEnableOption "Bun JavaScript runtime";
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.bun;
+              defaultText = lib.literalExpression "bun.packages.\${system}.bun";
+              description = "The bun package to use.";
+            };
+            settings = lib.mkOption {
+              type = lib.types.attrsOf lib.types.anything;
+              default = { };
+              example = lib.literalExpression ''
+                {
+                  install.optional = false;
+                  telemetry = false;
+                }
+              '';
+              description = "Configuration written to $XDG_CONFIG_HOME/bunfig.toml.";
+            };
+          };
+          config = lib.mkIf cfg.enable {
+            home.packages = [ cfg.package ];
+            xdg.configFile."bunfig.toml" = lib.mkIf (cfg.settings != { }) {
+              source = tomlFormat.generate "bunfig.toml" cfg.settings;
+            };
+          };
+        };
+
+      # nix-darwin module: programs.bun.enable
+      darwinModules.default =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.programs.bun;
+        in
+        {
+          options.programs.bun = {
+            enable = lib.mkEnableOption "Bun JavaScript runtime";
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.bun;
+              defaultText = lib.literalExpression "bun.packages.\${system}.bun";
+              description = "The bun package to use.";
+            };
+          };
+          config = lib.mkIf cfg.enable {
+            environment.systemPackages = [ cfg.package ];
+          };
+        };
+
+      # nix flake init -t github:usrbinkat/bun
+      templates.default = {
+        path = ./templates/default;
+        description = "Bun project with flake.nix consuming the bun overlay";
+        welcomeText = ''
+          # Bun Project
+
+          Run `nix develop` to enter the development shell with bun ${version}.
+          Run `bun install` to install dependencies.
+        '';
+      };
+
+      # nix flake check
+      checks = forAllSystems (system: {
+        bun-build = mkBun system;
+        bun-version =
+          let
+            pkgs = import nixpkgs { inherit system; };
+            bun = mkBun system;
+          in
+          pkgs.runCommand "check-bun-version" { nativeBuildInputs = [ bun ]; } ''
+            ACTUAL=$(bun --version)
+            EXPECTED="${version}"
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "version mismatch: got $ACTUAL, expected $EXPECTED" >&2
+              exit 1
+            fi
+            touch $out
+          '';
+      });
+
+      # nix fmt
+      formatter = forAllSystems (system: (import nixpkgs { inherit system; }).nixfmt-tree);
     };
 }
