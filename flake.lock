@@ -20,16 +20,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1759831965,
-        "narHash": "sha256-vgPm2xjOmKdZ0xKA6yLXPJpjOtQPHfaZDRtH+47XEBo=",
-        "owner": "NixOS",
+        "lastModified": 1789279908,
+        "narHash": "sha256-6lrHOEvT1B1MtaZ6CYf8+YWz108AGpKbPXGPlR+gKfY=",
+        "owner": "usrbinkat",
         "repo": "nixpkgs",
-        "rev": "c9b6fb798541223bbb396d287d16f43520250518",
+        "rev": "1a4306ae846c7fa64871c9436b01ddb37f8bf380",
         "type": "github"
       },
       "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
+        "owner": "usrbinkat",
+        "ref": "gssproxy-package-and-module",
         "repo": "nixpkgs",
         "type": "github"
       }
