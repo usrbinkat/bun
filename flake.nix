@@ -121,14 +121,18 @@
           devPkgs = [
             pkgs.cmake
             pkgs.ninja
+            pkgs.nasm
             pkgs.pkg-config
             pkgs.ccache
             clang
             llvm
             lld
+            pkgs.llvmPackages_21.clang-tools
+            (pkgs.writeShellScriptBin "clang-format-21" ''
+              exec ${pkgs.llvmPackages_21.clang-tools}/bin/clang-format-unwrapped "$@"
+            '')
             pkgs.gcc
-            pkgs.rustc
-            pkgs.cargo
+            pkgs.rustup
             pkgs.go
             (mkBun system)
             nodejs
@@ -146,20 +150,20 @@
             pkgs.unzip
             pkgs.xz
           ]
-          ++ lib.optionals pkgs.stdenv.isLinux [
+          ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
             pkgs.gdb
-            pkgs.xorg.libX11
-            pkgs.xorg.libxcb
-            pkgs.xorg.libXcomposite
-            pkgs.xorg.libXcursor
-            pkgs.xorg.libXdamage
-            pkgs.xorg.libXext
-            pkgs.xorg.libXfixes
-            pkgs.xorg.libXi
-            pkgs.xorg.libXrandr
-            pkgs.xorg.libXrender
-            pkgs.xorg.libXScrnSaver
-            pkgs.xorg.libXtst
+            pkgs.libx11
+            pkgs.libxcb
+            pkgs.libxcomposite
+            pkgs.libxcursor
+            pkgs.libxdamage
+            pkgs.libxext
+            pkgs.libxfixes
+            pkgs.libxi
+            pkgs.libxrandr
+            pkgs.libxrender
+            pkgs.libxscrnsaver
+            pkgs.libxtst
             pkgs.libxkbcommon
             pkgs.mesa
             pkgs.nspr
@@ -180,14 +184,10 @@
             pkgs.liberation_ttf
             pkgs.atk
             pkgs.libdrm
-            pkgs.xorg.libxshmfence
+            pkgs.libxshmfence
             pkgs.gdk-pixbuf
           ]
-          ++ lib.optionals pkgs.stdenv.isDarwin [
-            pkgs.darwin.apple_sdk.frameworks.CoreFoundation
-            pkgs.darwin.apple_sdk.frameworks.CoreServices
-            pkgs.darwin.apple_sdk.frameworks.Security
-          ];
+          ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ pkgs.apple-sdk ];
         in
         (pkgs.mkShell.override { stdenv = pkgs.clangStdenv; }) {
           packages = devPkgs;
@@ -205,10 +205,9 @@
             export CMAKE_SYSTEM_PROCESSOR="$(uname -m)"
             export TMPDIR="''${TMPDIR:-/tmp}"
           ''
-          + lib.optionalString pkgs.stdenv.isLinux ''
+          + lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
             export LD="${lib.getExe' lld "ld.lld"}"
             export NIX_CFLAGS_LINK="''${NIX_CFLAGS_LINK:+$NIX_CFLAGS_LINK }-fuse-ld=lld"
-            export LD_LIBRARY_PATH="${lib.makeLibraryPath devPkgs}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           ''
           + ''
 

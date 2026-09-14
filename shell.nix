@@ -1,80 +1,85 @@
 # Simple shell.nix for users without flakes enabled
 # For reproducible builds with locked dependencies, use: nix develop
 # This uses unpinned <nixpkgs> for simplicity; flake.nix provides version pinning via flake.lock
-{ pkgs ? import <nixpkgs> {} }:
+{
+  pkgs ? import <nixpkgs> { },
+}:
 
 pkgs.mkShell rec {
-  packages = with pkgs; [
-    # Core build tools (matching bootstrap.sh)
-    cmake
-    ninja
-    clang_21
-    llvm_21
-    lld_21
-    nodejs_24
-    bun
-    rustc
-    cargo
-    go
-    python3
-    ccache
-    pkg-config
-    gnumake
-    libtool
-    ruby
-    perl
+  packages =
+    with pkgs;
+    [
+      # Core build tools (matching bootstrap.sh)
+      cmake
+      ninja
+      clang_21
+      llvm_21
+      lld_21
+      nodejs_24
+      bun
+      rustc
+      cargo
+      go
+      python3
+      ccache
+      pkg-config
+      gnumake
+      libtool
+      ruby
+      perl
 
-    # Libraries
-    openssl
-    zlib
-    libxml2
+      # Libraries
+      openssl
+      zlib
+      libxml2
 
-    # Development tools
-    git
-    curl
-    wget
-    unzip
-    xz
+      # Development tools
+      git
+      curl
+      wget
+      unzip
+      xz
 
-    # Linux-specific: gdb and Chromium deps for testing
-  ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
-    gdb
-    # Chromium dependencies for Puppeteer tests
-    xorg.libX11
-    xorg.libxcb
-    xorg.libXcomposite
-    xorg.libXcursor
-    xorg.libXdamage
-    xorg.libXext
-    xorg.libXfixes
-    xorg.libXi
-    xorg.libXrandr
-    xorg.libXrender
-    xorg.libXScrnSaver
-    xorg.libXtst
-    libxkbcommon
-    mesa
-    nspr
-    nss
-    cups
-    dbus
-    expat
-    fontconfig
-    freetype
-    glib
-    gtk3
-    pango
-    cairo
-    alsa-lib
-    at-spi2-atk
-    at-spi2-core
-    libgbm
-    liberation_ttf
-    atk
-    libdrm
-    xorg.libxshmfence
-    gdk-pixbuf
-  ];
+      # Linux-specific: gdb and Chromium deps for testing
+    ]
+    ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+      gdb
+      # Chromium dependencies for Puppeteer tests
+      libx11
+      libxcb
+      libxcomposite
+      libxcursor
+      libxdamage
+      libxext
+      libxfixes
+      libxi
+      libxrandr
+      libxrender
+      libxscrnsaver
+      libxtst
+      libxkbcommon
+      mesa
+      nspr
+      nss
+      cups
+      dbus
+      expat
+      fontconfig
+      freetype
+      glib
+      gtk3
+      pango
+      cairo
+      alsa-lib
+      at-spi2-atk
+      at-spi2-core
+      libgbm
+      liberation_ttf
+      atk
+      libdrm
+      libxshmfence
+      gdk-pixbuf
+    ];
 
   shellHook = ''
     export CC="${pkgs.lib.getExe pkgs.clang_21}"
@@ -87,11 +92,12 @@ pkgs.mkShell rec {
     export CMAKE_RANLIB="$RANLIB"
     export CMAKE_SYSTEM_PROCESSOR=$(uname -m)
     export TMPDIR=''${TMPDIR:-/tmp}
-  '' + pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+  ''
+  + pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
     export LD="${pkgs.lib.getExe' pkgs.lld_21 "ld.lld"}"
     export NIX_CFLAGS_LINK="''${NIX_CFLAGS_LINK:+$NIX_CFLAGS_LINK }-fuse-ld=lld"
-    export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath packages}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-  '' + ''
+  ''
+  + ''
 
     echo "====================================="
     echo "Bun Development Environment (Nix)"
