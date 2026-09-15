@@ -5,6 +5,9 @@
   pkgs ? import <nixpkgs> { },
 }:
 
+let
+  toolchain = import ./nix/llvm.nix { inherit pkgs; };
+in
 pkgs.mkShell rec {
   packages =
     with pkgs;
@@ -12,13 +15,17 @@ pkgs.mkShell rec {
       # Core build tools (matching bootstrap.sh)
       cmake
       ninja
-      clang_21
-      llvm_21
-      lld_21
-      nodejs_24
+      nasm
+      toolchain.clang
+      toolchain.llvm
+      toolchain.lld
+      toolchain.clang-tools
+      (writeShellScriptBin "clang-format-21" ''
+        exec ${toolchain.clang-tools}/bin/clang-format-unwrapped "$@"
+      '')
+      nodejs_26
       bun
-      rustc
-      cargo
+      rustup
       go
       python3
       ccache
@@ -82,10 +89,10 @@ pkgs.mkShell rec {
     ];
 
   shellHook = ''
-    export CC="${pkgs.lib.getExe pkgs.clang_21}"
-    export CXX="${pkgs.lib.getExe' pkgs.clang_21 "clang++"}"
-    export AR="${pkgs.llvm_21}/bin/llvm-ar"
-    export RANLIB="${pkgs.llvm_21}/bin/llvm-ranlib"
+    export CC="${pkgs.lib.getExe toolchain.clang}"
+    export CXX="${pkgs.lib.getExe' toolchain.clang "clang++"}"
+    export AR="${toolchain.llvm}/bin/llvm-ar"
+    export RANLIB="${toolchain.llvm}/bin/llvm-ranlib"
     export CMAKE_C_COMPILER="$CC"
     export CMAKE_CXX_COMPILER="$CXX"
     export CMAKE_AR="$AR"
@@ -94,7 +101,7 @@ pkgs.mkShell rec {
     export TMPDIR=''${TMPDIR:-/tmp}
   ''
   + pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
-    export LD="${pkgs.lib.getExe' pkgs.lld_21 "ld.lld"}"
+    export LD="${pkgs.lib.getExe' toolchain.lld "ld.lld"}"
     export NIX_CFLAGS_LINK="''${NIX_CFLAGS_LINK:+$NIX_CFLAGS_LINK }-fuse-ld=lld"
   ''
   + ''

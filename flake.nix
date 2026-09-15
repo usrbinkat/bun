@@ -114,9 +114,10 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
-          llvm = pkgs.llvm_21;
-          clang = pkgs.clang_21;
-          lld = pkgs.lld_21;
+          toolchain = import ./nix/llvm.nix { inherit pkgs; };
+          llvm = toolchain.llvm;
+          clang = toolchain.clang;
+          lld = toolchain.lld;
           nodejs = pkgs.nodejs_26;
           devPkgs = [
             pkgs.cmake
@@ -127,9 +128,9 @@
             clang
             llvm
             lld
-            pkgs.llvmPackages_21.clang-tools
+            toolchain.clang-tools
             (pkgs.writeShellScriptBin "clang-format-21" ''
-              exec ${pkgs.llvmPackages_21.clang-tools}/bin/clang-format-unwrapped "$@"
+              exec ${toolchain.clang-tools}/bin/clang-format-unwrapped "$@"
             '')
             pkgs.gcc
             pkgs.rustup
