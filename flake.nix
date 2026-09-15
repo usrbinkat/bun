@@ -46,10 +46,9 @@
       };
 
       mkBun =
-        system:
+        pkgs:
         let
-          pkgs = import nixpkgs { inherit system; };
-          src = sources.${system};
+          src = sources.${pkgs.stdenv.hostPlatform.system};
         in
         pkgs.stdenvNoCC.mkDerivation {
           pname = "bun";
@@ -135,7 +134,7 @@
             pkgs.gcc
             pkgs.rustup
             pkgs.go
-            (mkBun system)
+            (mkBun pkgs)
             nodejs
             pkgs.python3
             pkgs.libtool
@@ -234,8 +233,8 @@
     {
       # nix build, nix run, nix shell, nix profile install
       packages = forAllSystems (system: {
-        bun = mkBun system;
-        default = mkBun system;
+        bun = mkBun (import nixpkgs { inherit system; });
+        default = self.packages.${system}.bun;
       });
 
       # nix develop — source build environment
@@ -243,13 +242,13 @@
       devShells = forAllSystems (system: {
         default = mkDevShell system;
         minimal = (import nixpkgs { inherit system; }).mkShell {
-          packages = [ (mkBun system) ];
+          packages = [ self.packages.${system}.bun ];
         };
       });
 
       # Composable overlay for downstream flakes
       overlays.default = final: _prev: {
-        bun = mkBun final.stdenv.hostPlatform.system;
+        bun = mkBun final;
       };
 
       # NixOS module: programs.bun.enable
@@ -359,11 +358,11 @@
 
       # nix flake check
       checks = forAllSystems (system: {
-        bun-build = mkBun system;
+        bun-build = self.packages.${system}.bun;
         bun-version =
           let
             pkgs = import nixpkgs { inherit system; };
-            bun = mkBun system;
+            bun = self.packages.${system}.bun;
           in
           pkgs.runCommand "check-bun-version" { nativeBuildInputs = [ bun ]; } ''
             ACTUAL=$(bun --version)

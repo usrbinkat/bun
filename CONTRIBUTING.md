@@ -8,9 +8,6 @@ A Nix flake is provided as an alternative to manual dependency installation:
 
 ```bash
 nix develop
-# or explicitly use the pure shell
-# nix develop .#pure
-export CMAKE_SYSTEM_PROCESSOR=$(uname -m)
 bun bd
 ```
 
